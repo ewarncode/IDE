@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP32 Web Flasher</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:      #0d1117;
+      --bg2:     #161b22;
+      --bg3:     #1c2128;
+      --border:  #30363d;
+      --border2: #484f58;
+      --green:   #3fb950;
+      --green2:  #23863a;
+      --gdim:    rgba(63,185,80,0.13);
+      --blue:    #58a6ff;
+      --bdim:    rgba(88,166,255,0.12);
+      --orange:  #f0883e;
+      --odim:    rgba(240,136,62,0.13);
+      --red:     #f85149;
+      --rdim:    rgba(248,81,73,0.12);
+      --yellow:  #e3b341;
+      --text:    #e6edf3;
+      --text2:   #8b949e;
+      --text3:   #484f58;
+      --mono:    'JetBrains Mono', monospace;
+      --sans:    'Inter', sans-serif;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── HEADER ── */
+    header {
+      height: 56px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.5rem;
+      flex-shrink: 0;
+    }
+    .logo { display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px; }
+    .logo-chip {
+      width:30px; height:30px;
+      background: var(--green);
+      border-radius:6px;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .logo-chip svg { width:17px; height:17px; fill:#0d1117; }
+    .hdr-right { display:flex; align-items:center; gap:12px; }
+    .browser-warn {
+      font-size:11px; color: var(--yellow);
+      background: rgba(227,179,65,0.1);
+      border: 1px solid rgba(227,179,65,0.3);
+      padding: 4px 10px; border-radius:20px;
+      display: none;
+    }
+    .browser-warn.show { display:block; }
+
+    /* ── STATUS BADGE ── */
+    .badge {
+      display:inline-flex; align-items:center; gap:5px;
+      font-family: var(--mono); font-size:11px; font-weight:500;
+      padding:3px 10px; border-radius:20px;
+    }
+    .badge .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+    .badge .dot.pulse { animation: blink 1.1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+    .badge.idle    { background:var(--bg3);  color:var(--text2); border:1px solid var(--border); }
+    .badge.ok      { background:var(--gdim); color:var(--green); border:1px solid var(--green2); }
+    .badge.busy    { background:var(--odim); color:var(--orange);border:1px solid var(--orange); }
+    .badge.err     { background:var(--rdim); color:var(--red);   border:1px solid var(--red); }
+    .badge.done    { background:var(--gdim); color:var(--green); border:1px solid var(--green2); }
+
+    /* ── LAYOUT ── */
+    main {
+      flex:1; display:grid;
+      grid-template-columns: 360px 1fr;
+      min-height:0;
+    }
+    @media(max-width:860px){
+      main { grid-template-columns:1fr; grid-template-rows: auto 1fr; }
+      .left-panel { border-right:none; border-bottom:1px solid var(--border); max-height:55vh; overflow-y:auto; }
+    }
+
+    /* ── LEFT PANEL ── */
+    .left-panel {
+      border-right:1px solid var(--border);
+      display:flex; flex-direction:column;
+    }
+
+    .section {
+      padding:1.1rem 1.25rem;
+      border-bottom:1px solid var(--border);
+    }
+    .sec-title {
+      font-size:11px; font-weight:600;
+      text-transform:uppercase; letter-spacing:.08em;
+      color:var(--text2);
+      margin-bottom:.85rem;
+      display:flex; align-items:center; gap:7px;
+    }
+    .sec-title::before {
+      content:''; display:block;
+      width:3px; height:11px;
+      background:var(--green); border-radius:2px;
+    }
+
+    label.field {
+      display:block; font-size:11px; color:var(--text2);
+      font-weight:500; margin-bottom:5px; margin-top:12px;
+    }
+    label.field:first-of-type { margin-top:0; }
+
+    select, input[type=text] {
+      width:100%;
+      background:var(--bg3);
+      border:1px solid var(--border);
+      border-radius:6px;
+      color:var(--text);
+      font-family:var(--mono); font-size:12.5px;
+      padding:8px 11px;
+      outline:none;
+      appearance:none; -webkit-appearance:none;
+      transition:border-color .15s;
+    }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%238b949e' d='M5 7L0 2h10z'/%3E%3C/svg%3E");
+      background-repeat:no-repeat;
+      background-position:right 11px center;
+      padding-right:30px;
+      cursor:pointer;
+    }
+    select:focus, input:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--bdim); }
+    select option { background:var(--bg3); }
+
+    /* port row */
+    .port-row { display:flex; gap:7px; align-items:center; }
+    .port-row select { flex:1; }
+
+    .btn-sm {
+      display:flex; align-items:center; gap:6px;
+      padding:7px 12px; border-radius:6px;
+      border:1px solid var(--border2);
+      background:var(--bg3);
+      color:var(--text); font-family:var(--sans);
+      font-size:12px; font-weight:500;
+      cursor:pointer; white-space:nowrap;
+      transition:all .13s;
+      flex-shrink:0;
+    }
+    .btn-sm:hover { border-color:var(--blue); color:var(--blue); }
+    .btn-sm.active { border-color:var(--green2); color:var(--green); }
+    .btn-sm svg { width:13px; height:13px; stroke:currentColor; }
+
+    .req-port-btn {
+      margin-top:7px;
+      width:100%;
+      padding:7px;
+      background:transparent;
+      border:1px dashed var(--border2);
+      color:var(--text2);
+      border-radius:6px;
+      cursor:pointer;
+      font-size:11.5px;
+      font-family:var(--mono);
+      transition:all .13s;
+    }
+    .req-port-btn:hover { border-color:var(--blue); color:var(--blue); }
+
+    /* ── FIRMWARE ZONE ── */
+    .fw-status {
+      display:flex; align-items:center; gap:10px;
+      padding:11px 13px;
+      background:var(--bg3);
+      border:1px solid var(--border);
+      border-radius:7px;
+      font-family:var(--mono); font-size:12px;
+    }
+    .fw-status .fw-icon { color:var(--green); font-size:16px; }
+    .fw-status .fw-name { flex:1; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .fw-status .fw-size { color:var(--text2); font-size:11px; flex-shrink:0; }
+    .fw-status.empty { border-style:dashed; border-color:var(--border2); }
+    .fw-status.empty .fw-name { color:var(--text3); }
+    .fw-status.ready { border-color:var(--green2); background:var(--gdim); }
+
+    .fw-auto-note {
+      margin-top:7px;
+      font-size:11px;
+      color:var(--text2);
+      font-family:var(--mono);
+      padding:6px 10px;
+      background:var(--bg3);
+      border-radius:5px;
+      border-left:2px solid var(--green2);
+    }
+
+    /* manual upload fallback */
+    .manual-upload {
+      margin-top:8px;
+      display:flex; gap:7px; align-items:center;
+    }
+    .upload-label {
+      flex:1;
+      display:flex; align-items:center; justify-content:center; gap:6px;
+      padding:7px 10px;
+      border:1px dashed var(--border2);
+      border-radius:6px;
+      cursor:pointer;
+      font-size:11.5px; color:var(--text2);
+      font-family:var(--mono);
+      transition:all .13s;
+    }
+    .upload-label:hover { border-color:var(--green); color:var(--green); }
+    .upload-label input { display:none; }
+
+    /* ── OPTIONS ── */
+    .check-row {
+      display:flex; align-items:center; gap:9px;
+      padding:5px 0; cursor:pointer;
+      font-size:13px; color:var(--text);
+    }
+    .check-row input[type=checkbox] { accent-color:var(--green); width:14px; height:14px; cursor:pointer; }
+
+    /* ── FLASH BTN ── */
+    .flash-btn {
+      margin:1rem 1.25rem;
+      width:calc(100% - 2.5rem);
+      padding:12px;
+      background:var(--green);
+      color:#0d1117;
+      border:none; border-radius:8px;
+      font-family:var(--sans); font-size:14px; font-weight:700;
+      cursor:pointer;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+      transition:all .14s;
+      letter-spacing:.02em;
+    }
+    .flash-btn:hover:not(:disabled) { background:#4cc963; transform:translateY(-1px); }
+    .flash-btn:active:not(:disabled) { transform:translateY(0); }
+    .flash-btn:disabled { background:var(--bg3); color:var(--text3); cursor:not-allowed; transform:none; }
+    .flash-btn svg { width:15px; height:15px; }
+
+    /* ── PROGRESS ── */
+    .progress-wrap { margin:0 1.25rem .9rem; display:none; }
+    .progress-wrap.show { display:block; }
+    .prog-track {
+      height:5px; background:var(--bg3);
+      border-radius:5px; overflow:hidden; margin-bottom:7px;
+    }
+    .prog-fill {
+      height:100%; width:0%;
+      background: linear-gradient(90deg, var(--green2), var(--green));
+      border-radius:5px;
+      transition:width .25s ease;
+    }
+    .prog-labels {
+      display:flex; justify-content:space-between;
+      font-family:var(--mono); font-size:11px; color:var(--text2);
+    }
+
+    /* ── RIGHT PANEL ── */
+    .right-panel { display:flex; flex-direction:column; min-height:0; }
+
+    .mon-header {
+      height:48px; flex-shrink:0;
+      background:var(--bg2);
+      border-bottom:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0 1.25rem;
+    }
+    .mon-title {
+      font-size:13px; font-weight:600;
+      display:flex; align-items:center; gap:8px;
+    }
+    .mon-actions { display:flex; align-items:center; gap:8px; }
+
+    .icon-btn {
+      width:30px; height:30px;
+      border:1px solid var(--border);
+      background:var(--bg3); border-radius:6px;
+      color:var(--text2); cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      transition:all .1s;
+    }
+    .icon-btn:hover { border-color:var(--border2); color:var(--text); }
+    .icon-btn svg { width:13px; height:13px; stroke:currentColor; fill:none; }
+
+    /* monitor body */
+    .mon-body {
+      flex:1; overflow-y:auto;
+      padding:.85rem 1.25rem;
+      font-family:var(--mono); font-size:12.5px; line-height:1.75;
+      background:var(--bg);
+    }
+    .line { display:flex; gap:10px; }
+    .ts { color:var(--text3); font-size:10.5px; min-width:64px; flex-shrink:0; padding-top:2px; }
+    .msg { word-break:break-all; }
+    .msg.info    { color:var(--blue); }
+    .msg.ok      { color:var(--green); }
+    .msg.warn    { color:var(--yellow); }
+    .msg.err     { color:var(--red); }
+    .msg.dim     { color:var(--text2); }
+    .msg.data    { color:var(--text); }
+
+    /* monitor input */
+    .mon-input-row {
+      flex-shrink:0;
+      display:flex;
+      border-top:1px solid var(--border);
+      background:var(--bg2);
+    }
+    .mon-prefix {
+      padding:0 11px;
+      font-family:var(--mono); font-size:13px; color:var(--green);
+      display:flex; align-items:center;
+      border-right:1px solid var(--border);
+      flex-shrink:0;
+    }
+    .mon-input {
+      flex:1; background:transparent; border:none;
+      padding:9px 11px;
+      font-family:var(--mono); font-size:12.5px; color:var(--text);
+      outline:none;
+    }
+    .mon-input::placeholder { color:var(--text3); }
+    .mon-send {
+      padding:8px 14px; border:none; background:none;
+      color:var(--text2); cursor:pointer;
+      font-family:var(--mono); font-size:11px;
+      border-left:1px solid var(--border);
+      transition:color .1s;
+    }
+    .mon-send:hover { color:var(--green); }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width:5px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-chip">
+      <svg viewBox="0 0 20 20"><rect x="4" y="4" width="12" height="12" rx="2"/><rect x="7" y="7" width="6" height="6" fill="#fff" opacity=".3"/><rect x="1" y="8" width="3" height="1.5"/><rect x="16" y="8" width="3" height="1.5"/><rect x="8" y="1" width="1.5" height="3"/><rect x="8" y="16" width="1.5" height="3"/></svg>
+    </div>
+    ESP32 Web Flasher
+  </div>
+  <div class="hdr-right">
+    <span id="browserWarn" class="browser-warn">⚠ Chrome / Edge required</span>
+    <span id="globalBadge" class="badge idle"><span class="dot"></span> Not connected</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ════ LEFT PANEL ════ -->
+  <div class="left-panel">
+
+    <!-- CONNECTION -->
+    <div class="section">
+      <div class="sec-title">Connection</div>
+
+      <label class="field">Serial Port</label>
+      <div class="port-row">
+        <select id="portSelect">
+          <option value="">— no port selected —</option>
+        </select>
+        <button class="btn-sm" id="connectBtn" onclick="handleConnect()">
+          <svg viewBox="0 0 24 24" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          Connect
+        </button>
+      </div>
+      <button class="req-port-btn" onclick="requestPort()">+ Request port from browser</button>
+
+      <label class="field">Board</label>
+      <select id="boardSel" onchange="updateChips()">
+        <option value="ESP32">ESP32 Dev Module</option>
+        <option value="ESP32-S2">ESP32-S2</option>
+        <option value="ESP32-S3">ESP32-S3</option>
+        <option value="ESP32-C3">ESP32-C3</option>
+        <option value="ESP32-C6">ESP32-C6</option>
+        <option value="ESP32-H2">ESP32-H2</option>
+      </select>
+
+      <label class="field">Baud Rate (Flash)</label>
+      <select id="baudSel" onchange="updateChips()">
+        <option value="921600">921600 — Fast (recommended)</option>
+        <option value="460800">460800</option>
+        <option value="230400">230400</option>
+        <option value="115200" selected>115200 — Safe / default</option>
+        <option value="74880">74880</option>
+      </select>
+    </div>
+
+    <!-- FIRMWARE -->
+    <div class="section">
+      <div class="sec-title">Firmware</div>
+
+      <!-- auto-detected firmware -->
+      <div class="fw-status empty" id="fwStatus">
+        <span class="fw-icon">📦</span>
+        <span class="fw-name" id="fwName">No firmware loaded</span>
+        <span class="fw-size" id="fwSize"></span>
+      </div>
+      <div class="fw-auto-note" id="fwAutoNote">
+        Auto-loads <code>firmware/firmware.bin</code> — just drop your file there and refresh.
+      </div>
+
+      <!-- manual override -->
+      <div class="manual-upload">
+        <label class="upload-label">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Override: upload .bin manually
+          <input type="file" id="binInput" accept=".bin" onchange="handleManualFile(this.files[0])" />
+        </label>
+      </div>
+
+      <label class="field" style="margin-top:10px;">Flash Offset</label>
+      <select id="offsetSel">
+        <option value="0x0">0x0000 — Merged firmware (recommended)</option>
+        <option value="0x1000">0x1000 — Bootloader only</option>
+        <option value="0x8000">0x8000 — Partition table</option>
+        <option value="0xE000">0xE000 — Boot app</option>
+        <option value="0x10000">0x10000 — App only</option>
+      </select>
+    </div>
+
+    <!-- OPTIONS -->
+    <div class="section">
+      <div class="sec-title">Options</div>
+      <label class="check-row"><input type="checkbox" id="optErase" /> Erase flash before writing</label>
+      <label class="check-row"><input type="checkbox" id="optVerify" checked /> Verify after flashing</label>
+      <label class="check-row"><input type="checkbox" id="optReset" checked /> Reset ESP32 after flash</label>
+    </div>
+
+    <!-- FLASH BUTTON -->
+    <button class="flash-btn" id="flashBtn" onclick="doFlash()" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      Flash Firmware
+    </button>
+
+    <div class="progress-wrap" id="progWrap">
+      <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+      <div class="prog-labels">
+        <span id="progLabel">Preparing...</span>
+        <span id="progPct">0%</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ════ RIGHT PANEL — SERIAL MONITOR ════ -->
+  <div class="right-panel">
+    <div class="mon-header">
+      <div class="mon-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        Serial Monitor
+        <span id="monBadge" class="badge idle" style="font-size:10px;"><span class="dot"></span>Closed</span>
+      </div>
+      <div class="mon-actions">
+        <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text2);cursor:pointer;">
+          <input type="checkbox" id="autoScroll" checked style="accent-color:var(--green);"/> Auto-scroll
+        </label>
+        <button class="icon-btn" onclick="clearMon()" title="Clear">
+          <svg viewBox="0 0 24 24" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6m5 0V4h4v2"/></svg>
+        </button>
+        <button class="icon-btn" onclick="downloadLog()" title="Save log">
+          <svg viewBox="0 0 24 24" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button class="btn-sm" id="monBtn" onclick="toggleMonitor()">
+          <svg viewBox="0 0 24 24" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          Open Monitor
+        </button>
+      </div>
+    </div>
+
+    <div class="mon-body" id="monBody"></div>
+
+    <div class="mon-input-row">
+      <span class="mon-prefix">&gt;&gt;</span>
+      <input class="mon-input" type="text" id="serInput"
+             placeholder="Type to send to ESP32 (press Enter)..."
+             onkeydown="if(event.key==='Enter') sendSerial()" />
+      <button class="mon-send" onclick="sendSerial()">SEND</button>
+    </div>
+  </div>
+
+</main>
+
+<script type="module">
+// ── Import ESPLoader + Transport as ES module (the only correct way for bundle.js) ──
+import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.5.7/bundle.js";
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let espPort   = null;
+let transport = null;
+let espLoader = null;
+let monReader = null;
+let monActive = false;
+let fwBuffer  = null;
+let fwName    = "";
+let logLines  = [];
+
+const $ = id => document.getElementById(id);
+
+// ── Expose functions to window so inline onclick= handlers work ───────────────
+window.requestPort   = requestPort;
+window.handleConnect = handleConnect;
+window.handleManualFile = handleManualFile;
+window.doFlash       = doFlash;
+window.toggleMonitor = toggleMonitor;
+window.sendSerial    = sendSerial;
+window.clearMon      = clearMon;
+window.downloadLog   = downloadLog;
+window.updateChips   = updateChips;
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+window.addEventListener("load", async () => {
+  if (!navigator.serial) {
+    $("browserWarn").classList.add("show");
+    log("Web Serial API not available. Use Chrome 89+ or Edge 89+.", "err");
+  } else {
+    log("ESP32 Web Flasher ready — esptool-js loaded.", "ok");
+    await autoLoadFirmware();
+  }
+  updateUI();
+});
+
+// ── Auto-load firmware/firmware.bin ───────────────────────────────────────────
+async function autoLoadFirmware() {
+  log("Auto-loading firmware/firmware.bin …", "dim");
+  try {
+    const resp = await fetch("firmware/firmware.bin");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} — file not found`);
+    fwBuffer = await resp.arrayBuffer();
+    fwName   = "firmware.bin";
+    setFwStatus(true, fwName, fwBuffer.byteLength);
+    log(`✓ Auto-loaded firmware.bin (${fmt(fwBuffer.byteLength)})`, "ok");
+    $("fwAutoNote").textContent = `✓ firmware/firmware.bin — ${fmt(fwBuffer.byteLength)} — ready`;
+  } catch (e) {
+    log("Auto-load failed: " + e.message, "warn");
+    log("Use the manual upload button, or drop firmware.bin into the firmware/ folder.", "dim");
+    setFwStatus(false, "firmware/firmware.bin not found", 0);
+  }
+  updateUI();
+}
+
+function handleManualFile(file) {
+  if (!file || !file.name.endsWith(".bin")) { log("Only .bin files accepted.", "warn"); return; }
+  const r = new FileReader();
+  r.onload = e => {
+    fwBuffer = e.target.result;
+    fwName   = file.name;
+    setFwStatus(true, fwName, fwBuffer.byteLength);
+    $("fwAutoNote").textContent = `Manual: ${file.name} (${fmt(fwBuffer.byteLength)})`;
+    log(`Loaded: ${file.name} (${fmt(fwBuffer.byteLength)})`, "ok");
+    updateUI();
+  };
+  r.readAsArrayBuffer(file);
+}
+
+function setFwStatus(ready, name, size) {
+  const el = $("fwStatus");
+  el.className = "fw-status " + (ready ? "ready" : "empty");
+  el.querySelector(".fw-icon").textContent = ready ? "✅" : "📦";
+  $("fwName").textContent = name;
+  $("fwSize").textContent = size ? fmt(size) : "";
+}
+
+// ── Port management ───────────────────────────────────────────────────────────
+async function requestPort() {
+  if (!navigator.serial) { alert("Web Serial not supported. Use Chrome or Edge."); return; }
+  try {
+    const port = await navigator.serial.requestPort();
+    registerPort(port);
+  } catch(e) {
+    if (e.name !== "NotFoundError") log("Port error: " + e.message, "err");
+  }
+}
+
+const _portMap = {};
+let   _portIdx = 1;
+
+function registerPort(port) {
+  const info  = port.getInfo?.() || {};
+  const vid   = (info.usbVendorId  || 0).toString(16).padStart(4,"0");
+  const pid   = (info.usbProductId || 0).toString(16).padStart(4,"0");
+  const label = info.usbProductId ? `USB VID:0x${vid} PID:0x${pid}` : `Serial Port ${_portIdx}`;
+  const key   = String(_portIdx++);
+  _portMap[key] = port;
+  const sel = $("portSelect");
+  sel.add(new Option(label, key));
+  sel.value = key;
+  log(`Port available: ${label}`, "info");
+}
+
+async function handleConnect() {
+  if (espPort) { await doDisconnect(); return; }
+  const key  = $("portSelect").value;
+  const port = _portMap[key];
+  if (!port) { log("No port selected. Click '+ Request port' first.", "warn"); return; }
+  await doConnect(port);
+}
+
+async function doConnect(port) {
+  try {
+    // Open at 115200 — esptool-js renegotiates to higher baud during flash
+    await port.open({ baudRate: 115200 });
+    espPort = port;
+    setBadge("globalBadge", "ok", "Connected");
+    $("connectBtn").textContent = "Disconnect";
+    $("connectBtn").classList.add("active");
+    log("Port connected at 115200 baud.", "ok");
+    updateUI();
+  } catch(e) {
+    log("Connect failed: " + e.message, "err");
+  }
+}
+
+async function doDisconnect() {
+  await stopMonitor();
+  try { transport?.disconnect?.(); } catch(_){}
+  transport = null; espLoader = null;
+  try { if (espPort) await espPort.close(); } catch(_){}
+  espPort = null;
+  setBadge("globalBadge","idle","Not connected");
+  $("connectBtn").textContent = "Connect";
+  $("connectBtn").classList.remove("active");
+  log("Port disconnected.", "dim");
+  updateUI();
+}
+
+// ── FLASH ─────────────────────────────────────────────────────────────────────
+async function doFlash() {
+  if (!espPort || !fwBuffer) return;
+
+  const erase    = $("optErase").checked;
+  const reset    = $("optReset").checked;
+  const baudRate = parseInt($("baudSel").value) || 921600;
+  const offset   = parseInt($("offsetSel").value, 16);
+
+  $("flashBtn").disabled = true;
+  setBadge("globalBadge","busy","Flashing…");
+  showProg(true);
+  setProgress(0, "Initialising…");
+
+  try {
+    await stopMonitor();
+
+    // Close the port first — ESPLoader / Transport reopens it internally
+    try { await espPort.close(); } catch(_){}
+
+    log("Creating transport…", "dim");
+    transport = new Transport(espPort, /* tracing= */ false);
+
+    const terminal = {
+      clean()         {},
+      writeLine(data) { log(String(data), "dim"); },
+      write(data)     { if (String(data).trim()) log(String(data).trimEnd(), "dim"); },
+    };
+
+    espLoader = new ESPLoader({ transport, baudrate: baudRate, terminal, romBaudrate: 115200 });
+
+    setProgress(5, "Connecting to ROM bootloader…");
+    log("Connecting… (hold BOOT, press EN/RST if not auto-resetting)", "warn");
+
+    const chip = await espLoader.main();
+    log(`Chip: ${chip}`, "ok");
+    setProgress(20, `Detected: ${chip}`);
+
+    if (erase) {
+      log("Erasing flash (~10 s)…", "warn");
+      setProgress(25, "Erasing flash…");
+      await espLoader.eraseFlash();
+      log("Flash erased.", "ok");
+    }
+
+    // Convert ArrayBuffer → binary string (required by esptool-js writeFlash)
+    const binStr = arrayBufferToBinaryString(fwBuffer);
+
+    log(`Flashing ${fwName} at 0x${offset.toString(16).toUpperCase()} (${fmt(fwBuffer.byteLength)}) @ ${baudRate} baud…`, "info");
+    setProgress(30, "Writing firmware…");
+
+    await espLoader.writeFlash({
+      fileArray: [{ data: binStr, address: offset }],
+      flashSize: "keep",
+      flashFreq: "keep",
+      flashMode: "keep",
+      eraseAll:  false,
+      compress:  true,
+      reportProgress(idx, written, total) {
+        const pct = 30 + Math.round((written / total) * 62);
+        setProgress(pct, `Writing… ${fmt(written)} / ${fmt(total)}`);
+      },
+      calculateMD5Hash: str => CryptoJS.MD5(CryptoJS.enc.Latin1.parse(str)).toString(),
+    });
+
+    log("Firmware written successfully.", "ok");
+    setProgress(95, "Resetting…");
+
+    if (reset) {
+      await espLoader.hardReset();
+      log("ESP32 reset — sketch is running!", "ok");
+    }
+
+    setProgress(100, "Done! ✓");
+    setBadge("globalBadge","done","Flash OK ✓");
+    log("─── Flash complete ───", "ok");
+
+  } catch(e) {
+    log("Flash error: " + e.message, "err");
+    setBadge("globalBadge","err","Flash failed");
+    setProgress(0, "Failed");
+  } finally {
+    try { await transport?.disconnect(); } catch(_){}
+    transport = null; espLoader = null;
+    // Re-open for serial monitor
+    try { await espPort.open({ baudRate: parseInt($("baudSel").value) || 115200 }); } catch(_){}
+    $("flashBtn").disabled = false;
+    updateUI();
+    log("Tip: click 'Open Monitor' to see Serial output.", "dim");
+  }
+}
+
+// ── Serial Monitor ────────────────────────────────────────────────────────────
+async function toggleMonitor() {
+  monActive ? await stopMonitor() : await startMonitor();
+}
+
+async function startMonitor() {
+  if (!espPort) { log("Connect a port first.", "warn"); return; }
+  if (monActive) return;
+  try {
+    if (!espPort.readable) await espPort.open({ baudRate: parseInt($("baudSel").value)||115200 });
+  } catch(_){}
+  monActive = true;
+  setBadge("monBadge","ok","Live");
+  $("monBtn").textContent = "Close Monitor";
+  $("monBtn").classList.add("active");
+  log(`Monitor open at ${$("baudSel").value} baud.`, "ok");
+  readLoop();
+}
+
+async function readLoop() {
+  try {
+    monReader = espPort.readable.getReader();
+    const dec = new TextDecoder();
+    let   buf = "";
+    while (monActive) {
+      const { value, done } = await monReader.read();
+      if (done || !monActive) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split(/\r?\n/);
+      buf = parts.pop();
+      for (const l of parts) log(l, "data");
+    }
+    if (buf.trim()) log(buf, "data");
+  } catch(e) {
+    if (monActive) log("Monitor error: " + e.message, "err");
+  } finally {
+    try { monReader?.releaseLock(); } catch(_){}
+    monReader = null;
+  }
+}
+
+async function stopMonitor() {
+  if (!monActive) return;
+  monActive = false;
+  try { await monReader?.cancel(); } catch(_){}
+  setBadge("monBadge","idle","Closed");
+  $("monBtn").textContent = "Open Monitor";
+  $("monBtn").classList.remove("active");
+  log("Monitor closed.", "dim");
+}
+
+async function sendSerial() {
+  const inp = $("serInput");
+  const txt = inp.value.trim();
+  if (!txt) return;
+  if (!espPort?.writable) { log("Not connected.", "warn"); return; }
+  const w = espPort.writable.getWriter();
+  await w.write(new TextEncoder().encode(txt + "\r\n"));
+  w.releaseLock();
+  log(">> " + txt, "dim");
+  inp.value = "";
+}
+
+// ── Progress + badges ─────────────────────────────────────────────────────────
+function showProg(v) { $("progWrap").classList.toggle("show",v); }
+function setProgress(pct, label) {
+  $("progFill").style.width  = pct + "%";
+  $("progLabel").textContent = label;
+  $("progPct").textContent   = Math.round(pct) + "%";
+}
+function setBadge(id, type, text) {
+  const el = $(id);
+  el.className = "badge " + type;
+  const pulse = (type==="busy") ? " pulse" : (type==="ok"&&id==="monBadge") ? " pulse" : "";
+  el.innerHTML = `<span class="dot${pulse}"></span>${text}`;
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function updateUI() {
+  $("flashBtn").disabled = !(espPort && fwBuffer);
+}
+function updateChips() {}
+
+function clearMon()  { $("monBody").innerHTML = ""; logLines = []; }
+function downloadLog() {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([logLines.join("\n")],{type:"text/plain"}));
+  a.download = "esp32-log.txt"; a.click();
+}
+
+// ── Logging ───────────────────────────────────────────────────────────────────
+function log(msg, type="") {
+  const body = $("monBody");
+  const ts   = new Date().toTimeString().slice(0,8);
+  const div  = document.createElement("div");
+  div.className = "line";
+  div.innerHTML = `<span class="ts">${ts}</span><span class="msg ${type}">${esc(msg)}</span>`;
+  body.appendChild(div);
+  logLines.push(`[${ts}] ${msg}`);
+  if (logLines.length > 8000) logLines.shift();
+  if ($("autoScroll").checked) body.scrollTop = body.scrollHeight;
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+function fmt(bytes) {
+  if (bytes < 1024)    return bytes + " B";
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + " KB";
+  return (bytes/1048576).toFixed(2) + " MB";
+}
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function arrayBufferToBinaryString(buf) {
+  const bytes = new Uint8Array(buf);
+  let str = "";
+  // Process in chunks to avoid call stack overflow on large files
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    str += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return str;
+}
+</script>
+
+<!-- CryptoJS for MD5 verification (required by esptool-js writeFlash) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+</body>
+</html>

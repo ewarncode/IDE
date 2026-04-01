@@ -1,0 +1,15 @@
+{
+  "name": "My ESP32 Firmware",
+  "version": "1.0.0",
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "firmware/firmware.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
